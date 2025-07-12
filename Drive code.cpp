@@ -92,6 +92,44 @@ lemlib::ExpoDriveCurve steerCurve(3, // joystick deadband out of 127
 // create the chassis
 lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 
+// turn to heading
+// parameters: degrees, maxspeed, timeout (if timeout = 0, it will move on once the movement is done)
+void setheading(float degrees, int maxspeed, int timeout) {
+    if (timeout > 0) {
+		// turn to specified heading with a timeout
+		chassis.turnToHeading(degrees, timeout, {.maxSpeed = maxspeed}, false);
+	} else {
+			// Turn to the specified heading without a timeout
+			chassis.turnToHeading(degrees, 0, {.maxSpeed = maxspeed}, false);
+
+			// Wait until the chassis has stopped moving
+			chassis.waitUntilDone();
+	}
+}
+
+// move forward a specified distance
+// perameters: inches, maxspeed, timeout (if timeout = 0, it will move on once the movement is done)
+void movefwd(float inches, float maxspeed, int timeout = 0) {
+    // Get the current pose of the chassis
+    lemlib::Pose currentPose = chassis.getPose();
+
+    // Calculate the target x position
+    float targetX = currentPose.x + inches;
+
+	if (timeout > 0) {
+    // Move to the target x position with a timeout
+    chassis.moveToPose(targetX, currentPose.y, currentPose.theta, timeout, {.maxSpeed = maxspeed});
+	} else {
+	// Move to the target x position until it reaches the target
+	chassis.moveToPose(targetX, currentPose.y, currentPose.theta, 0, {.maxSpeed = maxspeed});
+
+	// Wait until the chassis has stopped moving
+	chassis.waitUntilDone();
+	}
+}
+
+
+
 /**
  * Runs initialization code. This occurs as soon as the program is started.
  *
@@ -192,7 +230,12 @@ void opcontrol() {
 		} else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
 			bottomrollers.move_velocity(-500); // move bottom rollers at full speed in reverse
 			toprollers.move_velocity(-500); // move top rollers at full speed in reverse
-		} else {
+		} else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+			bottomrollers.move_velocity(-500); // move bottom rollers at full speed in reverse
+			toprollers.move_velocity(0); // stop top rollers
+		} else
+		
+		{
 			bottomrollers.move_velocity(0); // stop bottom rollers
 			toprollers.move_velocity(0); // stop top rollers
 		}
