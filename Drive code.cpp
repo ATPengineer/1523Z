@@ -1,6 +1,7 @@
 #include "main.h"
 #include "lemlib/api.hpp" // IWYU pragma: keep
-
+#include <iostream>
+using namespace std;
 // controller
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
@@ -15,16 +16,24 @@ pros::Controller controller(pros::E_CONTROLLER_MASTER);
 * Port 10 - top right */
 
 // drive motors
-pros::MotorGroup rightMotors({1, -2, 3}, pros::MotorGearset::blue);
-pros::MotorGroup leftMotors({-16, 17, -18}, pros::MotorGearset::blue);
 
-// rollers
-pros::Motor bottomrollers(11, pros::MotorGearset::blue, pros::MotorUnits::degrees); // using degrees as encoder units
-pros::Motor midrollers(6, pros::MotorGearset::blue, pros::MotorUnits::degrees); // using degrees as encoder units
-pros::Motor backrollers(15, pros::MotorGearset::blue, pros::MotorUnits::degrees);
-pros::ADIDigitalOut basket ('A');
+// drivetrain motors
+pros::MotorGroup rightMotors({15, 16, -17}, pros::MotorGearset::blue);
+pros::MotorGroup leftMotors({-18, -19, 20}, pros::MotorGearset::blue);
+
+// indexing/intake motors
+pros::Motor backroller(-14, pros::MotorGearset::green);
+pros::Motor midrollers(-13, pros::MotorGearset::green);
+pros::Motor bottomrollers(12, pros::MotorGearset::blue);
+
+// sensors
+pros::Optical optical(9);
+pros::Imu imu(8);
+pros::adi::DigitalOut basket (1);
+pros::adi::DigitalOut scraper (2);
+pros::adi::DigitalOut lower_basket (3);
+pros::adi::DigitalOut instapark (4);
 // Inertial Sensor on port 7
-pros::Imu imu(7);
 /*
 // tracking wheels
 // horizontal tracking wheel encoder. Rotation sensor, port 20, not reversed
@@ -36,10 +45,56 @@ lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_275, -5.
 // vertical tracking wheel. 2.75" diameter, 2.5" offset, left of the robot (negative)
 lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_275, -2.5);
 */
+bool basket_toggle = false;
+bool scraper_toggle = false;
+bool lower_toggle = false;
+constexpr float RED_HUE = 5;
+constexpr float BLUE_HUE = 210;
+constexpr float HUE_TOLERANCE = 15;
+
+// Helper void functions to change states
+void setIntakeTop() {
+    basket.set_value(false);
+    bottomrollers.move_velocity(500);
+    midrollers.move_velocity(500);
+    backroller.move_velocity(-500);
+}
+
+void setMidScoring() {
+    basket.set_value(true);
+    backroller.move_velocity(500);
+    bottomrollers.move_velocity(500);
+    midrollers.move_velocity(-500);
+}
+
+void setHighScoring() {
+    basket.set_value(true);
+    backroller.move_velocity(500);
+    bottomrollers.move_velocity(500);
+    midrollers.move_velocity(500);
+}
+
+void setLowScoring() {
+    basket.set_value(true);
+    bottomrollers.move_velocity(-500);
+    midrollers.move_velocity(-500);
+    backroller.move_velocity(500);
+}
+
+void setIdle() {
+    basket.set_value(false);
+    bottomrollers.move_velocity(0);
+    midrollers.move_velocity(0);
+    backroller.move_velocity(0);
+}
+
+
+
+
 // drivetrain settings
 lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
-                              14.5, // 14 inch track width
+                              14, // 14 inch track width
                               lemlib::Omniwheel::NEW_4, // using new 3.25" omnis
                               343, // drivetrain rpm is 360
                               2 // horizontal drift is 2. If we had traction wheels, it would have been 8
@@ -128,6 +183,10 @@ void movefwd(float inches, float maxspeed, int timeout = 0) {
 	}
 }
 
+void colorsort(bool color){
+    
+}
+
 /**
  * Runs initialization code. This occurs as soon as the program is started.
  *
@@ -162,7 +221,6 @@ void initialize() {
         }
     });
 }
-
 /**
  * Runs while the robot is disabled
  */
@@ -171,7 +229,9 @@ void disabled() {}
 /**
  * runs after initialize if the robot is connected to field control
  */
-void competition_initialize() {}
+void competition_initialize() {
+    
+}
 
 // get a path used for pure pursuit
 // this needs to be put outside a function
@@ -183,8 +243,18 @@ ASSET(example_txt); // '.' replaced with "_" to make c++ happy
  * 
  */
 void autonomous() {
-    chassis.moveToPose(-23, 22, 65, 4000);
-    chassis.moveToPose(-24, 47, 282, 4000);
+    setIntakeTop();
+    chassis.moveToPose(10, 30, 90, 4000);
+    chassis.turnToHeading(135, 4000);
+    chassis.moveToPoint(39, 20, 3000);
+    chassis.turnToHeading(180, 2000);
+    scraper.set_value(true);
+    chassis.moveToPoint(39, 0, 2000);
+    chassis.moveToPoint(39, 20, 2000);
+    chassis.turnToHeading(0, 4000);
+    
+
+
 }
 /**
  * Runs in driver control
@@ -193,37 +263,60 @@ void opcontrol() {
     // loop forever
     while (true) {
         // get left y and right x positions
-        int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-        int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-		
-		if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-			bottomrollers.move_velocity(500); // move bottom rollers at full speed
-			midrollers.move_velocity(-500); // move top rollers at full speed
-		} else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-			bottomrollers.move_velocity(500); // move bottom rollers at full speed
-			midrollers.move_velocity(500); // move top rollers at full speed
-            backrollers.move_velocity(-500);//move (actual) top roller full speed
-		} else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-			bottomrollers.move_velocity(-500); // move bottom rollers at full speed in reverse
-			midrollers.move_velocity(-500); // move top rollers at full speed in reverse@p
-		} else if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            backrollers.move_velocity(500);
-			bottomrollers.move_velocity(-500); // move bottom rollers at full speed in reverse
-			midrollers.move_velocity(-500); // stop top rollers
-		} else
-		
-		{
-			bottomrollers.move_velocity(0); // stop bottom rollers
-			midrollers.move_velocity(0); // stop top rollers
-		}
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP)) {
-            basket.set_value(true);
+        float r_hue_min = std::fmod(RED_HUE - HUE_TOLERANCE + 360, 360.0f);
+		float r_hue_max = std::fmod(RED_HUE + HUE_TOLERANCE, 360.0f);
+		float b_hue_min = std::fmod(BLUE_HUE - HUE_TOLERANCE + 360, 360.0f);
+		float b_hue_max = std::fmod(BLUE_HUE + HUE_TOLERANCE, 360.0f);
+
+        const int linear_power = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
+        const int lateral_power = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
+
+		if(basket_toggle){
+            basket.set_value(true);    
         }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
+        else if (!basket_toggle){
             basket.set_value(false);
         }
-        // move the robot
-        chassis.curvature(leftY, rightX);
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
+            setIntakeTop();
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            setMidScoring();
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+            setHighScoring();
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            setLowScoring();
+        }else{
+            setIdle();
+        }
+		
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_X)) {
+            if(basket_toggle){
+                basket_toggle = false;
+            } else {
+                basket_toggle = true;
+            }
+        }
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+            if(scraper_toggle){
+                scraper_toggle = false;
+            } else {
+                scraper_toggle = true;
+            }
+        }
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_A)) {
+            if(lower_toggle){
+                lower_toggle = false;
+            } else {
+                lower_toggle = true;
+            }
+        }
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_B)){
+            instapark.set_value(true);
+        }
+        
 
         // delay to save resources
         pros::delay(25);
